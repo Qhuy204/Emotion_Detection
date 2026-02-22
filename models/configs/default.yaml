@@ -1,16 +1,16 @@
 model:
-  model_name: "microsoft/Multilingual-MiniLM-L12-H384"
+  model_name: "xlm-roberta-base"
   num_labels: 4
   dropout: 0.1
-  hidden_dim: 384
+  hidden_dim: 768
 
 data:
-  max_length: 64
-  batch_size: 128
+  max_length: 128
+  batch_size: 64
   eval_batch_size: 64
 
 training:
-  learning_rate: 3e-5
+  learning_rate: 2e-5
   weight_decay: 0.01
   num_epochs_phase1: 5
   num_epochs_phase2: 10
@@ -18,3 +18,8 @@ training:
   save_total_limit: 2
   output_dir: "./outputs"
   load_best_model_at_end: true
+  warmup_ratio: 0.1
+  lr_scheduler_type: "cosine"
+  label_smoothing: 0.1
+  gradient_accumulation_steps: 2
+  focal_loss_gamma: 2.0

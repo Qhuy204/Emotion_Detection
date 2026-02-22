@@ -7,6 +7,7 @@ from models.architectures.classifier import EmotionClassifier, ModelConfig
 from training.trainer import EmotionTrainer, get_training_args, compute_metrics
 from training.losses import get_phase_weights
 
+
 def main():
     parser = argparse.ArgumentParser(description="Train Emotion Detection Model")
     parser.add_argument("--config", type=str, default="models/configs/default.yaml", help="Path to config file")
@@ -33,57 +34,84 @@ def main():
     )
     model = EmotionClassifier(model_config)
 
-    # Phase 1: GoEmotions
-    print("--- Starting Phase 1: GoEmotions ---")
+    focal_gamma = config["training"].get("focal_loss_gamma", 2.0)
+    label_smoothing = config["training"].get("label_smoothing", 0.0)
+
+    # ── Phase 1: GoEmotions ──────────────────────────────────────
+    print("=" * 60)
+    print("  Phase 1: Pre-training on GoEmotions (English)")
+    print("=" * 60)
+    
     go_dataset = dm.load_go_emotions()
-    # Split for validation if not present
     if "test" not in go_dataset:
         go_dataset = go_dataset["train"].train_test_split(test_size=0.1, seed=42)
-    
     go_dataset = dm.prepare_datasets(go_dataset)
-    
+
     weights_p1 = torch.tensor(get_phase_weights("phase1"), dtype=torch.float)
     training_args_p1 = get_training_args(config, "phase1")
-    
+
     trainer_p1 = EmotionTrainer(
         model=model.encoder,
         args=training_args_p1,
         train_dataset=go_dataset["train"],
         eval_dataset=go_dataset["test"],
         compute_metrics=compute_metrics,
-        phase_weights=weights_p1.to(model.encoder.device)
+        phase_weights=weights_p1,
+        focal_gamma=focal_gamma,
+        label_smoothing=label_smoothing,
     )
     trainer_p1.train()
-    
-    # Save base model after phase 1
+
+    # Save Phase 1 model
     p1_path = os.path.join(config["training"]["output_dir"], "phase1_final")
     model.save_pretrained(p1_path)
+    dm.tokenizer.save_pretrained(p1_path)
+    print(f"Phase 1 model saved to {p1_path}")
 
-    # Phase 2: ViGoEmotions
-    print("--- Starting Phase 2: ViGoEmotions ---")
+    # ── Phase 2: ViGoEmotions ────────────────────────────────────
+    print("=" * 60)
+    print("  Phase 2: Fine-tuning on ViGoEmotions (Vietnamese)")
+    print("=" * 60)
+
+    # Resolve HF token: support both actual token and env var name
     hf_token = args.hf_token or os.getenv("HF_TOKEN")
+    if hf_token and not hf_token.startswith("hf_"):
+        # User passed an env var name like "HF_TOKEN" instead of the actual token
+        hf_token = os.getenv(hf_token, hf_token)
+
+    if hf_token:
+        from huggingface_hub import login
+        login(token=hf_token)
+        print("Authenticated with HuggingFace Hub")
+    else:
+        print("WARNING: No HF_TOKEN provided. Gated datasets may not load.")
+
     vi_dataset = dm.load_vi_go_emotions(token=hf_token)
     vi_dataset = dm.prepare_datasets(vi_dataset)
-    
+
     weights_p2 = torch.tensor(get_phase_weights("phase2"), dtype=torch.float)
     training_args_p2 = get_training_args(config, "phase2")
-    
-    # Continue from p1 model
+
     trainer_p2 = EmotionTrainer(
         model=model.encoder,
         args=training_args_p2,
         train_dataset=vi_dataset["train"],
         eval_dataset=vi_dataset["validation"],
         compute_metrics=compute_metrics,
-        phase_weights=weights_p2.to(model.encoder.device)
+        phase_weights=weights_p2,
+        focal_gamma=focal_gamma,
+        label_smoothing=label_smoothing,
     )
     trainer_p2.train()
-    
+
     # Save final model
     p2_path = os.path.join(config["training"]["output_dir"], "final_model")
     model.save_pretrained(p2_path)
     dm.tokenizer.save_pretrained(p2_path)
-    print(f"Training completed. Final model saved to {p2_path}")
+    print("=" * 60)
+    print(f"  Training completed! Final model saved to {p2_path}")
+    print("=" * 60)
+
 
 if __name__ == "__main__":
     main()
