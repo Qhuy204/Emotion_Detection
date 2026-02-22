@@ -34,8 +34,7 @@ def main():
     )
     model = EmotionClassifier(model_config)
 
-    focal_gamma = config["training"].get("focal_loss_gamma", 2.0)
-    label_smoothing = config["training"].get("label_smoothing", 0.0)
+    label_smoothing = config["training"].get("label_smoothing", 0.1)
 
     # ── Phase 1: GoEmotions ──────────────────────────────────────
     print("=" * 60)
@@ -57,9 +56,9 @@ def main():
         eval_dataset=go_dataset["test"],
         compute_metrics=compute_metrics,
         phase_weights=weights_p1,
-        focal_gamma=focal_gamma,
         label_smoothing=label_smoothing,
     )
+
     trainer_p1.train()
 
     # Save Phase 1 model
@@ -99,7 +98,6 @@ def main():
         eval_dataset=vi_dataset["validation"],
         compute_metrics=compute_metrics,
         phase_weights=weights_p2,
-        focal_gamma=focal_gamma,
         label_smoothing=label_smoothing,
     )
     trainer_p2.train()

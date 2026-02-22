@@ -2,29 +2,28 @@ import os
 import torch
 from typing import Dict, Any, Optional
 from transformers import Trainer, TrainingArguments, IntervalStrategy
-from training.losses import FocalLoss, get_phase_weights
+from training.losses import BalancedCrossEntropyLoss, get_phase_weights
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 
 
 class EmotionTrainer(Trainer):
     """
-    Custom Trainer that uses Focal Loss for better handling of class imbalance.
+    Custom Trainer with class-weighted cross-entropy and label smoothing.
     """
     def __init__(
         self,
         *args,
         phase_weights: Optional[torch.Tensor] = None,
-        focal_gamma: float = 2.0,
-        label_smoothing: float = 0.0,
+        label_smoothing: float = 0.1,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
-        alpha = phase_weights.tolist() if phase_weights is not None else None
-        self.loss_fn = FocalLoss(
-            alpha=alpha,
-            gamma=focal_gamma,
-            label_smoothing=label_smoothing
+        weights = phase_weights.tolist() if phase_weights is not None else None
+        self.loss_fn = BalancedCrossEntropyLoss(
+            weights=weights,
+            label_smoothing=label_smoothing,
+            max_weight=3.0,
         )
 
     def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
@@ -33,11 +32,13 @@ class EmotionTrainer(Trainer):
         logits = outputs.get("logits")
 
         if labels is not None:
+            # Move loss weights to same device as logits (lazy)
+            if self.loss_fn.weight is not None and self.loss_fn.weight.device != logits.device:
+                self.loss_fn.weight = self.loss_fn.weight.to(logits.device)
             loss = self.loss_fn(logits, labels)
         else:
             loss = outputs.loss
 
-        # Put labels back for metrics
         inputs["labels"] = labels
         return (loss, outputs) if return_outputs else loss
 
@@ -53,7 +54,7 @@ def compute_metrics(eval_pred):
     return {
         "accuracy": acc,
         "f1_weighted": f1_weighted,
-        "f1_macro": f1_macro
+        "f1_macro": f1_macro,
     }
 
 
@@ -72,7 +73,6 @@ def get_training_args(config: Dict[str, Any], phase: str) -> TrainingArguments:
         save_total_limit=config["training"]["save_total_limit"],
         fp16=torch.cuda.is_available(),
         report_to="none",
-        # New improvements
         warmup_ratio=config["training"].get("warmup_ratio", 0.1),
         lr_scheduler_type=config["training"].get("lr_scheduler_type", "cosine"),
         gradient_accumulation_steps=config["training"].get("gradient_accumulation_steps", 1),
