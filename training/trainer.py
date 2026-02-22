@@ -13,9 +13,8 @@ class EmotionTrainer(Trainer):
     def __init__(self, *args, phase_weights: Optional[torch.Tensor] = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.phase_weights = phase_weights
-        self.loss_fn = WeightedCrossEntropyLoss(weights=None) # Corrected below in compute_loss
-        if self.phase_weights is not None:
-             self.loss_fn = torch.nn.CrossEntropyLoss(weight=self.phase_weights)
+        # Initial loss function, will be moved to device in compute_loss
+        self.loss_fn = torch.nn.CrossEntropyLoss(weight=self.phase_weights)
 
     def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
         labels = inputs.get("labels")
@@ -23,6 +22,11 @@ class EmotionTrainer(Trainer):
         logits = outputs.get("logits")
         
         if labels is not None:
+            # Ensure weights are on the same device as logits
+            if self.phase_weights is not None and self.phase_weights.device != logits.device:
+                self.phase_weights = self.phase_weights.to(logits.device)
+                self.loss_fn = torch.nn.CrossEntropyLoss(weight=self.phase_weights)
+                
             loss = self.loss_fn(logits.view(-1, self.model.config.num_labels), labels.view(-1))
         else:
             loss = outputs.loss
