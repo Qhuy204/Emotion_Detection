@@ -110,19 +110,24 @@ def main():
     print(f"  Training completed! Final model saved to {p2_path}")
     print("=" * 60)
 
-    # ── ONNX Export + INT8 Quantization ──────────────────────────
-    print("=" * 60)
-    print("  Exporting to ONNX + INT8 Quantization")
-    print("=" * 60)
+    # ── ONNX Export + INT8 Quantization (optional) ────────────────
+    try:
+        from predict import export_and_quantize
+        print("=" * 60)
+        print("  Exporting to ONNX + INT8 Quantization")
+        print("=" * 60)
 
-    from predict import export_and_quantize
-    onnx_path = os.path.join(config["training"]["output_dir"], "onnx")
-    int8_path = os.path.join(config["training"]["output_dir"], "int8")
-    export_and_quantize(p2_path, onnx_path, int8_path)
+        onnx_path = os.path.join(config["training"]["output_dir"], "onnx")
+        int8_path = os.path.join(config["training"]["output_dir"], "int8")
+        export_and_quantize(p2_path, onnx_path, int8_path)
 
-    print("=" * 60)
-    print(f"  All done! INT8 model ready at: {int8_path}")
-    print("=" * 60)
+        print("=" * 60)
+        print(f"  All done! INT8 model ready at: {int8_path}")
+        print("=" * 60)
+    except (ImportError, ModuleNotFoundError) as e:
+        print(f"\n  Skipping ONNX export: {e}")
+        print("  To enable, install: pip install optimum[onnxruntime]")
+        print(f"  You can export later: python predict.py --model_path {p2_path} --export")
 
 
 if __name__ == "__main__":

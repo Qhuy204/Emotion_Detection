@@ -12,7 +12,7 @@ Input Text → XLM-RoBERTa-base (768 dim) → Classification Head → [positive,
 - **Phase 1**: Pre-train on GoEmotions (211k English samples)
 - **Phase 2**: Fine-tune on ViGoEmotions (16k Vietnamese samples)
 
-**Key Techniques**: Focal Loss (γ=2.0), cosine LR scheduler, warmup, label smoothing, class-weighted α
+**Key Techniques**: Class-weighted CE with label smoothing, cosine LR scheduler, warmup
 
 ## Project Structure
 
@@ -22,7 +22,7 @@ Input Text → XLM-RoBERTa-base (768 dim) → Classification Head → [positive,
 │   ├── architectures/classifier.py  # EmotionClassifier
 │   └── configs/default.yaml         # Hyperparameters
 ├── training/
-│   ├── losses.py                # Focal Loss with per-class weights
+│   ├── losses.py                # BalancedCrossEntropyLoss with class weights
 │   └── trainer.py               # Custom HF Trainer
 ├── train.py                     # Main training (Phase1 → Phase2 → ONNX → INT8)
 ├── predict.py                   # Inference + ONNX export + INT8 quantization
@@ -31,14 +31,23 @@ Input Text → XLM-RoBERTa-base (768 dim) → Classification Head → [positive,
 
 ## Usage
 
-### Training
+### Install
 ```bash
 pip install -r requirements.txt
+```
+
+### Training
+```bash
 python train.py --config models/configs/default.yaml --hf_token HF_TOKEN
 ```
-Training auto-exports to ONNX + INT8 after completion.
+ONNX export runs automatically after training if `optimum` is installed.
 
-### Inference (INT8 model)
+### Inference (PyTorch)
+```bash
+python predict.py --model_path ./outputs/final_model --text "Cảm ơn bạn nhiều!"
+```
+
+### Inference (ONNX INT8 — recommended for production)
 ```bash
 python predict.py --model_path ./outputs/int8 --onnx --text "Cảm ơn bạn nhiều!"
 ```
@@ -66,4 +75,4 @@ python predict.py --model_path ./outputs/final_model --export
 | surprise | 14,823 | 688 |
 | neutral | 58,709 | 570 |
 
-Handled via Focal Loss α weights (inverse frequency, normalized).
+Handled via class-weighted CrossEntropyLoss (capped at 3.0) + label smoothing (0.1).

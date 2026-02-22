@@ -5,7 +5,7 @@ evaluate
 scikit-learn
 onnx
 onnxruntime
-optimum
+optimum[onnxruntime]
 pyyaml
 pandas
 numpy
