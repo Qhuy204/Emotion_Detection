@@ -57,17 +57,27 @@ def export_and_quantize(model_path: str, onnx_path: str, int8_path: str) -> None
     qconfig = AutoQuantizationConfig.avx512_vnni(is_static=False, per_channel=False)
     quantizer.quantize(save_dir=int8_path, quantization_config=qconfig)
 
-    # Copy tokenizer to INT8 dir
-    tokenizer.save_pretrained(int8_path)
+    # Copy all supporting files (config.json, tokenizer, etc.) to INT8 dir
+    import shutil
+    from pathlib import Path
+    for f in Path(onnx_path).iterdir():
+        if f.suffix != ".onnx" and f.name != "onnx":
+            dest = Path(int8_path) / f.name
+            if not dest.exists():
+                if f.is_dir():
+                    shutil.copytree(str(f), str(dest))
+                else:
+                    shutil.copy2(str(f), str(dest))
     print(f"  INT8 model saved to {int8_path}")
 
     # Show size comparison
-    onnx_size = sum(f.stat().st_size for f in __import__("pathlib").Path(onnx_path).rglob("*.onnx"))
-    int8_size = sum(f.stat().st_size for f in __import__("pathlib").Path(int8_path).rglob("*.onnx"))
+    onnx_size = sum(f.stat().st_size for f in Path(onnx_path).rglob("*.onnx"))
+    int8_size = sum(f.stat().st_size for f in Path(int8_path).rglob("*.onnx"))
     print(f"\n  Size comparison:")
     print(f"    ONNX FP32: {onnx_size / 1e6:.1f} MB")
     print(f"    ONNX INT8: {int8_size / 1e6:.1f} MB")
-    print(f"    Compression: {onnx_size / int8_size:.1f}x smaller")
+    if int8_size > 0:
+        print(f"    Compression: {onnx_size / int8_size:.1f}x smaller")
 
 
 if __name__ == "__main__":
