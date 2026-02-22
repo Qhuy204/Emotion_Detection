@@ -112,6 +112,20 @@ def main():
     print(f"  Training completed! Final model saved to {p2_path}")
     print("=" * 60)
 
+    # ── ONNX Export + INT8 Quantization ──────────────────────────
+    print("=" * 60)
+    print("  Exporting to ONNX + INT8 Quantization")
+    print("=" * 60)
+
+    from predict import export_and_quantize
+    onnx_path = os.path.join(config["training"]["output_dir"], "onnx")
+    int8_path = os.path.join(config["training"]["output_dir"], "int8")
+    export_and_quantize(p2_path, onnx_path, int8_path)
+
+    print("=" * 60)
+    print(f"  All done! INT8 model ready at: {int8_path}")
+    print("=" * 60)
+
 
 if __name__ == "__main__":
     main()

@@ -1,57 +1,69 @@
-# Emotion Detection Project
+# Emotion Detection
 
-This project refactors the original `emotional.ipynb` notebook into a modular, production-ready Python project. It implements a two-phase training strategy for cross-lingual emotion detection (English -> Vietnamese) with advanced class balancing.
+Multilingual emotion classification (English + Vietnamese) using transfer learning with XLM-RoBERTa → ONNX INT8 for lightweight deployment.
+
+## Architecture
+
+```
+Input Text → XLM-RoBERTa-base (768 dim) → Classification Head → [positive, negative, surprise, neutral]
+```
+
+**Training Strategy**: Two-phase sequential transfer learning
+- **Phase 1**: Pre-train on GoEmotions (211k English samples)
+- **Phase 2**: Fine-tune on ViGoEmotions (16k Vietnamese samples)
+
+**Key Techniques**: Focal Loss (γ=2.0), cosine LR scheduler, warmup, label smoothing, class-weighted α
 
 ## Project Structure
 
-```text
-.
-├── data/
-│   └── dataset.py          # Unified DataModule for GoEmotions and ViGoEmotions
+```
+├── data/dataset.py              # DataModule (GoEmotions + ViGoEmotions)
 ├── models/
-│   ├── architectures/
-│   │   └── classifier.py   # EmotionClassifier architecture
-│   └── configs/
-│       └── default.yaml    # Hyperparameters and training config
+│   ├── architectures/classifier.py  # EmotionClassifier
+│   └── configs/default.yaml         # Hyperparameters
 ├── training/
-│   ├── losses.py           # Phase-specific weighted cross-entropy
-│   └── trainer.py          # Custom Trainer with weighted loss
-├── train.py                # Main training script (Phase 1 & Phase 2)
-├── predict.py              # Inference and ONNX export script
-└── requirements.txt        # Project dependencies
+│   ├── losses.py                # Focal Loss with per-class weights
+│   └── trainer.py               # Custom HF Trainer
+├── train.py                     # Main training (Phase1 → Phase2 → ONNX → INT8)
+├── predict.py                   # Inference + ONNX export + INT8 quantization
+└── requirements.txt
 ```
 
-## How to use
+## Usage
 
-### 1. Install Dependencies
+### Training
 ```bash
 pip install -r requirements.txt
+python train.py --config models/configs/default.yaml --hf_token HF_TOKEN
 ```
+Training auto-exports to ONNX + INT8 after completion.
 
-### 2. Training
-Run the training script. It will automatically perform Phase 1 (pre-training on English) and Phase 2 (fine-tuning on Vietnamese).
-
+### Inference (INT8 model)
 ```bash
-python train.py --config models/configs/default.yaml --hf_token <YOUR_HF_TOKEN>
+python predict.py --model_path ./outputs/int8 --onnx --text "Cảm ơn bạn nhiều!"
 ```
-*Note: Ensure your HuggingFace token has access to the private `sonlam1102/vigoemotions` dataset.*
 
-### 3. Inference
-You can predict the emotion of a sentence using the trained model:
-
+### Manual ONNX Export
 ```bash
-python predict.py --model_path ./outputs/final_model --text "Mình cảm thấy rất tuyệt!"
+python predict.py --model_path ./outputs/final_model --export
 ```
 
-### 4. ONNX Export & Quantization
-To export the final model to ONNX for optimized inference:
+## Model Outputs
 
-```bash
-python predict.py --model_path ./outputs/final_model --export_onnx --onnx_output ./emotion_model_onnx
-```
+| Output | Path | Size | Use Case |
+|:-------|:-----|:-----|:---------|
+| Phase 1 (EN) | `outputs/phase1_final/` | ~1.1GB | Checkpoint |
+| Final (VI) | `outputs/final_model/` | ~1.1GB | Full precision |
+| ONNX FP32 | `outputs/onnx/` | ~1.1GB | ONNX runtime |
+| **ONNX INT8** | **`outputs/int8/`** | **~280MB** | **Production / Chatbot** |
 
-## Improvements over Notebook
-1.  **Sequential Transfer Learning**: Pre-training on massive English data before fine-tuning on Vietnamese.
-2.  **Class Weights**: Specific weights calculated for both datasets to solve the "Surprise" and "Neutral" (VI) class imbalance.
-3.  **Modular Code**: Separated concerns make it easier to maintain and extend.
-4.  **Config-Driven**: Easily experiment with learning rates, batch sizes, and hidden dimensions via YAML.
+## Class Balancing
+
+| Label | GoEmotions (EN) | ViGoEmotions (VI) |
+|:------|:----------------|:------------------|
+| positive | 76,245 | 6,505 |
+| negative | 61,448 | 8,768 |
+| surprise | 14,823 | 688 |
+| neutral | 58,709 | 570 |
+
+Handled via Focal Loss α weights (inverse frequency, normalized).
