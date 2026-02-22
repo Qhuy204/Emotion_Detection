@@ -1,0 +1,13 @@
+torch
+transformers
+datasets
+evaluate
+scikit-learn
+onnx
+onnxruntime
+optimum
+pyyaml
+pandas
+numpy
+huggingface_hub
+python-dotenv

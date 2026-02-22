@@ -1,0 +1,20 @@
+model:
+  model_name: "microsoft/Multilingual-MiniLM-L12-H384"
+  num_labels: 4
+  dropout: 0.1
+  hidden_dim: 384
+
+data:
+  max_length: 64
+  batch_size: 128
+  eval_batch_size: 64
+
+training:
+  learning_rate: 3e-5
+  weight_decay: 0.01
+  num_epochs_phase1: 5
+  num_epochs_phase2: 10
+  logging_steps: 100
+  save_total_limit: 2
+  output_dir: "./outputs"
+  load_best_model_at_end: true
